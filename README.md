@@ -8,3 +8,5 @@ Links to help learn how to download your data: https://support.stats.fm/docs/imp
 
 
 Note: I opted for the download with a quick turn-around time. It took about a week to recieve data that recorded listening history over the course of 1 year. There are other options available.
+
+Also -- see branch including a short presentation of my analysis. Enjoy!
