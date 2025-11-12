@@ -1,7 +1,7 @@
 ---
 title: "Spotify Analysis"
 author: "Emma Johnson"
-date: "Last Update: Nov. 11, 2025"
+date: "Last Update: Nov. 12, 2025"
 output: html_document
 ---
 
@@ -11,8 +11,6 @@ This project will use my Extended Streaming History, which is available by reque
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-getwd()
-setwd("C:/Users/emma3/OneDrive/Documents/Masters Coursework/Fall 2024/talk presentation_files/Spotify cool stuff")
 ```
 
 ## PART 1: Load Libraries and Data
@@ -25,7 +23,7 @@ library(jsonlite)
 ```
 
 ```{r load the data}
-full_data <- list.files("C:/Users/emma3/OneDrive/Documents/Masters Coursework/Fall 2024/talk presentation_files/Spotify cool stuff/Spotify Extended Streaming History", 
+full_data <- list.files("<path to folder containing data here>", 
                         pattern = "Streaming_History_Audio", 
                         full.names = TRUE) %>%
   map_dfr(fromJSON) %>% 
@@ -33,6 +31,14 @@ full_data <- list.files("C:/Users/emma3/OneDrive/Documents/Masters Coursework/Fa
 
 glimpse(full_data)
 ```
+
+For the most part, the data types are compatible with the following analysis, except for the `ts` attribute. I want to coerce this to a dat format, so that'll be the first tiny step.
+
+```{r}
+full_data$ts <- lubridate::ymd_hms(full_data$ts, tz = "UTC")
+```
+
+
 
 There appears to be a lot of `NA` values in my data, mostly because I am a frequent *music* listener, a less-frequent *podcast* listener, and basically a nonexistent *audiobook* listener.
 
@@ -101,7 +107,297 @@ As a quick check, we now see that the `audiobooks` data is left with columns tha
 
 ```{r glimpse audiobook data}
 glimpse(audiobooks)
-
 ```
+
+### 1.1: Music Data
+
+I'm not overly interested in all of the features in the `music` dataset so far, so I'll clean it up a bit more to focus on the features I'm interested in analyzing.
+
+To be specific, I will discard the following columns: `platform`, `conn_country`, `ip_addr`, `offline`, `offline_timestamp`, and `incognito_mode`.
+
+```{r music data}
+music <- music %>% select(-c('platform', 'conn_country', 'ip_addr', 'offline', 'offline_timestamp', 'incognito_mode'))
+
+glimpse(music)
+```
+
+### 1.2: Podcasts Data
+
+For the `podcasts` data, I'll remove the same features. Namely, `platform`, `conn_country`, `ip_addr`, `offline`, `offline_timestamp`, and `incognito_mode`.
+
+```{r podcast data}
+podcasts <- podcasts %>% select(-c('platform', 'conn_country', 'ip_addr', 'offline', 'offline_timestamp', 'incognito_mode'))
+
+glimpse(podcasts)
+```
+
+### 1.3: Audiobooks Data
+
+Finally, I'll do the same for the `audiobooks` data, removing the same columns.
+
+```{r podcast data}
+audiobooks <- audiobooks %>% select(-c('platform', 'conn_country', 'ip_addr', 'offline', 'offline_timestamp', 'incognito_mode'))
+
+glimpse(audiobooks)
+```
+
+## PART 2: Analyzing Music Listening Habits
+
+Now that the data is cleaned, I can begin analyzing my listening habits. I'll start with the `music` dataset, replicating findings from Spotify Wrapped and developing my own.
+
+### 2.1: Total Time Spent Listening
+
+So far, each song is recorded by milliseconds played. As far as I'm concerned, the total amount of time spent listening is not overly interesting when recorded in ms. We'll convert these to minutes, hours, and days for easier interpretation.
+
+I want to draw attention to the nature of this data. It has been recorded over 10 years, so calculating the total time spent listening to music many also be interesting to analyze as a portion of a year.
+
+```{r music total time}
+music %>% 
+  summarise(total_ms_played = sum(ms_played)) %>%
+  mutate(total_mins_played = total_ms_played / 60000,
+         total_hours_played = total_mins_played / 60,
+         total_days_played = total_hours_played / 24,
+         total_years_played = total_days_played / 365)
+```
+
+Interpreting these results, it appears that I've spent a total of over 253 days listening to music on Spotify over the past decade. This equates to over 2/3 of a year, meaning if I started a timer right now, it would take over 8 months of continuous listening to match the amount of time I've spent listening to music on Spotify!
+
+#### 2.1.1: Creating a Function for Total Time Calculation
+
+Looking ahead, I'll want to recycle some of this code for the `podcasts` and `audiobooks` datasets, so I'll save the general framework as a function to use later. Note that the `total_years_played` will be left out, since I assume the amount of time spent listening to `podcasts` and `audiobooks` will be far less than `music`.
+
+```{r total time function}
+total_time <- function(df) {
+  return(df %>% 
+    summarise(total_ms_played = sum(ms_played)) %>%
+    mutate(total_mins_played = total_ms_played / 60000,
+           total_hours_played = total_mins_played / 60,
+           total_days_played = total_hours_played / 24)
+  )
+}
+```
+
+### 2.2: Top Songs
+
+Since this data is recorded over such a long period of time, there are many different approaches we could take to classify "top" songs. For example, does a top song mean it has the most plays? What about the most minutes spent listening? Should it be broken up by year or month, or simply over the whole course of being a Spotify user? Clearly, there are many different combinations and angles to take when deciding on this metric. Since the results may vary, I'll go over some different ways we can find the "top" songs.
+
+#### 2.2.1: Top 10 Songs by Total Minutes Played 
+
+Our first decision will be made by considering the songs with the most minutes spent listening over the entire course of being a Spotify user. This means that the results will show how many minutes total I've spent listening to each song over the past decade.
+
+```{r songs top 10 minutes}
+music %>%
+  group_by(track = master_metadata_track_name,
+           artist = master_metadata_album_artist_name) %>%
+  summarise(total_mins = sum(ms_played) / 60000, .groups = 'drop') %>%
+  arrange(desc(total_mins)) %>%
+  head(10)
+```
+
+#### 2.2.2: Top 10 Songs by Total Plays
+
+Consider how some songs are much longer than others. The length of a song may inflate the total amount of time spent listening to it when considered a top song. For example, If one song is 2 minutes long and another is 4 minutes long, the former song can be played twice in the same amount of time it takes to listen to the latter song once. 
+
+We could also use the frequency of which a song appears in the data as a metric for top songs. We will call this frequency per song the total amount of `plays`. Again, we will consider this over the full course of the data.
+
+```{r songs top 10 plays}
+music %>%
+  group_by(track = master_metadata_track_name,
+           artist = master_metadata_album_artist_name) %>%
+  summarise(plays = n(), .groups = 'drop') %>%
+  arrange(desc(plays)) %>%
+  head(10)
+```
+
+Note that this interpreting this metric does not mean that a songs with 300 plays is played in full 300 times. It could be played for 10 seconds and then skipped. We could filter our data further to only consider songs that are played all the way through.
+
+Using the `reason_end` feature, we can discover the different reasons why an individual observation for a song ends and starts recording data for another. The different levels of this feature are as follows:
+
+```{r reason_end levels}
+levels(as.factor(music$reason_end))
+```
+
+Next, we will only consider that data for songs that play all the way through by filtering the `reason_end` feature to only include `trackdone`.
+
+```{r trackdone}
+music %>%
+  filter(reason_end == "trackdone") %>%
+  group_by(track = master_metadata_track_name,
+           artist = master_metadata_album_artist_name) %>%
+  summarise(plays = n(), .groups = 'drop') %>%
+  arrange(desc(plays)) %>%
+  head(10)
+```
+
+Notice how the results are different this time around. This highlights the importance of a data scientist's knowledge of the data when making decisions.
+
+### 2.3: Top Artists
+
+Similar to the problem of how to classify a top song, we run into the issue of how to classify a top artist. Again, there are different ways to approach this, but we can use the same reasoning as before.
+
+#### 2.3.1: Top 10 Artists by Total Minutes Played 
+
+The only thing we need to modify to go from top songs to top artists is our grouping variables. Before, we grouped by both `track` and `artist`, but now we will only group by `artist`.
+
+```{r artists top 10 minutes}
+music %>%
+  group_by(artist = master_metadata_album_artist_name) %>%
+  summarise(total_mins = sum(ms_played) / 60000, .groups = 'drop') %>%
+  arrange(desc(total_mins)) %>%
+  head(10)
+```
+
+#### 2.3.2: Top 10 Artists by Total Plays
+
+This time, I will disregard the `reason_end` feature, as I am not concerned with how it plays a role in counting plays for artists. Note that you could easily incorporate this feature as a filter, similarly to how we did it for songs.
+
+```{r artists top 10 plays}
+music %>%
+  group_by(artist = master_metadata_album_artist_name) %>%
+  summarise(plays = n(), .groups = 'drop') %>%
+  arrange(desc(plays)) %>%
+  head(10)
+```
+
+At a glance, there is not much of a change in the lineups based on the two different methods. However, the order of the artists does change, which is interesting to note. This again highlights the importance of understanding the data and how different metrics can lead to different interpretations of what is "top".
+
+### 2.4: Top Albums
+
+Finally, we will reuse our train of thought to classify top albums.
+
+#### 2.4.1: Top 10 Albums by Total Minutes Played 
+
+This time around, `master_metadata_album_album_name` (aliased as `album`) and `master_metadata_album_artist_name` (aliased as `artist`) will be our grouping variables.
+
+```{r albums top 10 minutes}
+music %>%
+  group_by(album = master_metadata_album_album_name,
+           artist = master_metadata_album_artist_name) %>%
+  summarise(total_mins = sum(ms_played) / 60000, .groups = 'drop') %>%
+  arrange(desc(total_mins)) %>%
+  head(10)
+```
+
+#### 2.4.2: Top 10 Albums by Total Plays
+
+Note that for total plays in this case, plays will be recorded at the level of songs from an album versus a total play of the entire album as a whole.
+
+When it comes to top albums, it is difficult to filter the data to ensure that it is in sequential order for listening to an album from start to finish. This is an important note, as the total plays can be inflated if songs from an album are played out of order, or if only a few songs from an album are played repeatedly. Similarly, I could listen to one song from an album frequently over a long period of time, but never listen to other songs from that album. therefore, this analysis takes careful consideration.
+
+We will first recycle some code and look at the frequency of plays through a familiar lens. I will only consider when `reason_end` is recorded as `trackdone` to assume that songs are played in full when listening to an album cover to cover.
+
+```{r albums top 10 plays}
+music %>%
+  filter(reason_end == "trackdone") %>%
+  group_by(album = master_metadata_album_album_name,
+           artist = master_metadata_album_artist_name) %>%
+  summarise(plays = n(), .groups = 'drop') %>%
+  arrange(desc(plays)) %>%
+  head(10)
+```
+
+There are a couple of underlying problems with choosing top albums this way. I'll begin by presenting a problematic example. Say I have 2 albums, one with 10 songs and another with 20 songs. If the albums are around an hour each, I will listen to twice the amount of plays in the latter situation than the former, because it has more songs. Then, the final tally will be inflated, even though I listened to each album only once within a given hour. 
+
+These issues are important to be aware of, and should be considered when interpreting the results. If I wanted to find the true frequency of which I listened to an album from the first to the last song, I'd need to reference extra data on each album that I do not have here. For this reason, we will halt the album analysis here.
+
+### 2.5: Listening Over the Years
+
+As mentioned earlier, we could also split the data up by year to narrow our vision from a decade-long view to a year-by-year view. First, let's see which years are included in the `full_data`.
+
+```{r all years}
+unique(year(music$ts))
+```
+We can see that the data spans from 2015 to 2025. Since I requested this data in the middle of 2025, the data for the year 2025 is incomplete. Similarly, the data for 2015 begins later in that year, since I started listening later than 01/01/2015. Therefore, I'm not going to consider these years for analysis, since they cannot be analyzed with complete information.
+
+I will choose the year 2024 to conduct a single years analysis on. Note that you could change this to accommodate for any other year in the data, if desired.
+
+```{r music 2024}
+music_2024 <- music %>%
+  filter(lubridate::year(ts) == 2024)
+```
+
+Now, we can repeat the same steps as before to find the total time spent listening to music, top songs, and top artists in 2024. Note that I will include only one method per category for brevity, but you could easily modify the earlier code to match other results. The key difference in the code is the swap of the `music` data for the `music_2024` data.
+
+#### 2.5.1: Total Time Spent Listening in 2024
+
+```{r music_2024 total time}
+total_time(music_2024)
+```
+
+#### 2.5.2: Top 10 Songs in 2024 by Total Minutes Played
+
+```{r songs 2024 top 10 minutes}
+music_2024 %>%
+  group_by(track = master_metadata_track_name,
+           artist = master_metadata_album_artist_name) %>%
+  summarise(total_mins = sum(ms_played) / 60000, .groups = 'drop') %>%
+  arrange(desc(total_mins)) %>%
+  head(10)
+```
+
+#### 2.5.3: Top 10 Artists in 2024 by Total Plays
+
+```{r artists 2024 top 10 plays}
+music_2024 %>%
+  group_by(artist = master_metadata_album_artist_name) %>%
+  summarise(plays = n(), .groups = 'drop') %>%
+  arrange(desc(plays)) %>%
+  head(10)
+```
+
+#### 2.5.4: Top 10 Albums in 2024 by Total Minutes Played 
+
+```{r albums 2024 top 10 plays}
+music_2024 %>%
+  filter(reason_end == "trackdone") %>%
+  group_by(album = master_metadata_album_album_name,
+           artist = master_metadata_album_artist_name) %>%
+  summarise(plays = n(), .groups = 'drop') %>%
+  arrange(desc(plays)) %>%
+  head(10)
+```
+
+Exploring these results, I see one in particular that stands out. the album, CHASE by Aaron May is one where I have a favorite song I listen to frequently, but I have never listened to the entire album cover to cover. This highlights the earlier point about the difficulty of analyzing albums without more information.
+
+This suggests a couple ways around this for further discussion. I could've created a minimum count for the amount of unique songs that must appear in my history in order to classify an album as a top album. 
+
+For example, say most albums have around 10 songs. I could set a minimum of 7 unique songs that must appear in my listening history to classify an album as a top album. This would help filter out albums where I only listen to one or two songs repeatedly.
+
+## PART 3: Analyzing Podcast Listening Habits
+
+### 3.1: Total Time Spent Listening
+
+```{r podcasts total time}
+total_time(podcasts)
+```
+
+
+
+## PART 4: Analyzing Audiobook Listening Habits
+
+### 4.1: Total Time Spent Listening
+
+```{r audiobooks total time}
+total_time(audiobooks)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
