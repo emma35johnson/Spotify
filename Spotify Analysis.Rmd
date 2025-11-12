@@ -1,0 +1,107 @@
+---
+title: "Spotify Analysis"
+author: "Emma Johnson"
+date: "Last Update: Nov. 11, 2025"
+output: html_document
+---
+
+# Spotify Listening Analysis
+
+This project will use my Extended Streaming History, which is available by request for any user of Spotify. See [support.spotify.com](https://support.spotify.com/us/article/understanding-my-data/) for more detailed information on how to request, fetch, and understand your data.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+getwd()
+setwd("C:/Users/emma3/OneDrive/Documents/Masters Coursework/Fall 2024/talk presentation_files/Spotify cool stuff")
+```
+
+## PART 1: Load Libraries and Data
+
+First, I'll start by loading the necessary packages I'll be using in this analysis. I'll note that a lot of the work will be done using `dplyr`, which is part of the `tidyverse` package.
+
+```{r libraries}
+library(tidyverse)
+library(jsonlite)
+```
+
+```{r load the data}
+full_data <- list.files("C:/Users/emma3/OneDrive/Documents/Masters Coursework/Fall 2024/talk presentation_files/Spotify cool stuff/Spotify Extended Streaming History", 
+                        pattern = "Streaming_History_Audio", 
+                        full.names = TRUE) %>%
+  map_dfr(fromJSON) %>% 
+  suppressMessages()
+
+glimpse(full_data)
+```
+
+There appears to be a lot of `NA` values in my data, mostly because I am a frequent *music* listener, a less-frequent *podcast* listener, and basically a nonexistent *audiobook* listener.
+
+So, the next step is to separate the data based on listening type. I'll also go through some additional cleaning to remove any super-incomplete data, as it serves meaningless in this analysis.
+
+```{r separating data by music, podcasts, and audiobooks}
+
+## Starting with audiobooks (smallest dataset):
+# note that `audiobook_uri` is the unique identifier for audiobooks
+
+# in base R:
+audiobooks <- full_data[which(!is.na(full_data$audiobook_uri)), ]
+
+# or
+
+# using dplyr:
+audiobooks <- full_data %>%
+  filter(!is.na(audiobook_uri))
+
+## Next, podcasts (larger than audiobooks, smaller than music):
+# `spotify_episode_uri` is the unique identifier for podcasts
+
+podcasts <- full_data[which(!is.na(full_data$spotify_episode_uri)), ]
+
+# or
+
+podcasts <- full_data %>%
+  filter(!is.na(spotify_episode_uri))
+
+## Finally, music (largest dataset):
+# simplest to assume music makes up the original set minus audiobooks and podcasts
+
+music <- full_data[which(is.na(full_data$audiobook_uri) & is.na(full_data$spotify_episode_uri)),]
+
+# or
+
+music <- full_data %>%
+  filter(is.na(audiobook_uri) & is.na(spotify_episode_uri))
+```
+
+Now we have datasets dedicated to the different listening types: `music`, `podcasts`, and `audiobooks`, but each holds unnecessary information about the others due to the preservation of *all* of the original columns.
+
+For example, we do not need the information from columns 6 through 12 in the `audiobook` dataset. These columns (i.e. `master_metadata_track_name` through `spotify_episode_uri`) give no information on `audiobooks` and are full of `NA`s. 
+
+```{r unnecessary columns}
+glimpse(audiobooks)
+```
+
+The `glimpse` function helps us identify which columns are useful for each dataset. Using `glimpse`, I found that columns 6 through 9 are specific to `music`, columns 10 through 12 are specific to `podcasts`, and columns 13 through 16 are specific to `audiobooks.`
+
+The next step is to decide which columns to keep, and which to discard. We will do this uniquely for each dataset, according to our previous findings listed above.
+
+```{r cleaning datasets}
+
+## Removing unneccessary columns from audiobooks dataset:
+audiobooks <- audiobooks[, -(6:12)]
+
+## On to the podcasts data:
+podcasts <- podcasts[, -c(6:9, 13:16)]
+
+## Now the music data:
+music <- music[, -(10:16)]
+```
+
+As a quick check, we now see that the `audiobooks` data is left with columns that describe this listening habit, removing the ones that offered no information.
+
+```{r glimpse audiobook data}
+glimpse(audiobooks)
+
+```
+
+
