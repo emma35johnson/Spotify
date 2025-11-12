@@ -1,7 +1,7 @@
 ---
 title: "Spotify Analysis"
 author: "Emma Johnson"
-date: "Last Update: Nov. 12, 2025"
+date: "Last Update: Nov. 11, 2025"
 output: html_document
 ---
 
@@ -11,6 +11,7 @@ This project will use my Extended Streaming History, which is available by reque
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+spotify_path <- ####### put your path to the folder containing the Extended Streaming History data here
 ```
 
 ## PART 1: Load Libraries and Data
@@ -23,7 +24,7 @@ library(jsonlite)
 ```
 
 ```{r load the data}
-full_data <- list.files("<path to folder containing data here>", 
+full_data <- list.files(spotify_path, 
                         pattern = "Streaming_History_Audio", 
                         full.names = TRUE) %>%
   map_dfr(fromJSON) %>% 
@@ -37,8 +38,6 @@ For the most part, the data types are compatible with the following analysis, ex
 ```{r}
 full_data$ts <- lubridate::ymd_hms(full_data$ts, tz = "UTC")
 ```
-
-
 
 There appears to be a lot of `NA` values in my data, mostly because I am a frequent *music* listener, a less-frequent *podcast* listener, and basically a nonexistent *audiobook* listener.
 
@@ -135,7 +134,7 @@ glimpse(podcasts)
 
 Finally, I'll do the same for the `audiobooks` data, removing the same columns.
 
-```{r podcast data}
+```{r audiobooks data}
 audiobooks <- audiobooks %>% select(-c('platform', 'conn_country', 'ip_addr', 'offline', 'offline_timestamp', 'incognito_mode'))
 
 glimpse(audiobooks)
@@ -380,24 +379,6 @@ total_time(podcasts)
 ```{r audiobooks total time}
 total_time(audiobooks)
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
